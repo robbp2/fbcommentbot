@@ -338,168 +338,179 @@ class FacebookCommenter:
             
             time.sleep(3)
             
-            # First check for device approval page
+            # First check if we're already on the 2FA page
             try:
-                approval_text = WebDriverWait(driver, 5).until(
+                auth_app_text = WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((
-                        By.XPATH, 
-                        "//*[contains(text(), 'approve your login') or contains(text(), 'Approve your login') or contains(text(), 'Waiting for approval') or contains(text(), 'Check your notifications on another device')]"
+                        By.XPATH,
+                        "//*[contains(text(), 'authentication app') or contains(text(), 'two-factor authentication')]"
                     ))
                 )
-                print("Found device approval page")
-                
-                # Look for and click "Try another way" button
+                print("Already on 2FA page")
+                return "2fa", driver, totp_secret
+            except TimeoutException:
+                # Now check for device approval page
                 try:
-                    try_another_way = WebDriverWait(driver, 5).until(
-                        EC.element_to_be_clickable((
+                    approval_text = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((
                             By.XPATH, 
-                            "//span[contains(text(), 'Try another way') or contains(text(), 'try another way')]"
+                            "//*[(contains(., 'approve your login') or contains(., 'Approve your login')) and (contains(., 'notifications') or contains(., 'another device'))]"
                         ))
                     )
-                    print("Found 'Try another way' button, clicking...")
-                    driver.execute_script("arguments[0].click();", try_another_way)
-                    time.sleep(3)
+                    print("Found device approval page")
                     
-                    # Wait for and handle the modal popup
+                    # Look for and click "Try another way" button
                     try:
-                        # Wait for and find the unchecked radio button
-                        auth_app_radio = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((
-                                By.CSS_SELECTOR,
-                                'input[type="radio"][aria-checked="false"]'
+                        try_another_way = WebDriverWait(driver, 5).until(
+                            EC.element_to_be_clickable((
+                                By.XPATH, 
+                                "//span[contains(text(), 'Try another way') or contains(text(), 'try another way')]"
                             ))
                         )
-                        print("Found unchecked radio button")
-                        
-                        # Click the radio button
-                        driver.execute_script("arguments[0].click();", auth_app_radio)
-                        print("Clicked radio button")
-                        time.sleep(1)
-                        
-                        # Verify it was checked
-                        if auth_app_radio.get_attribute('aria-checked') == 'true':
-                            print("Successfully checked radio button")
-                        else:
-                            print("Warning: Radio button may not be checked properly")
-                        
-                        # Find and click the Continue button using multiple strategies
-                        print("Looking for Continue button...")
-                        continue_button = None
-                        
-                        # Try multiple selectors for the Continue button
-                        continue_selectors = [
-                            # Specific selectors for the actual button, not the container
-                            "//span[text()='Continue']/parent::div[@role='button']",
-                            "//div[@role='button'][./span[text()='Continue']]",
-                            "//div[@role='button'][normalize-space(.)='Continue']",
-                            "//div[contains(@class, 'x1n2onr6')][.//span[text()='Continue'] and not(.//span[text()='continue'])]",
-                            "//div[text()='Continue' and @role='button']",
-                            # More specific backup selectors
-                            "//div[@aria-label='Continue' and @role='button']",
-                            "//div[contains(@class, 'x1n2onr6')]/div/span[text()='Continue']/.."
-                        ]
-                        
-                        for selector in continue_selectors:
-                            try:
-                                print(f"Trying selector: {selector}")
-                                elements = driver.find_elements(By.XPATH, selector)
-                                for element in elements:
-                                    # Only consider visible elements with short text
-                                    if element.is_displayed() and len(element.text) < 30:
-                                        text = element.text.strip()
-                                        print(f"Found potential button with text: '{text}'")
-                                        if text == "Continue":
-                                            continue_button = element
-                                            print("Found exact Continue button!")
-                                            break
-                                if continue_button:
-                                    break
-                            except Exception:
-                                continue
-                        
-                        if continue_button:
-                            print("Found Continue button, analyzing element...")
-                            try:
-                                # Print element details for debugging
-                                print(f"Button tag name: {continue_button.tag_name}")
-                                print(f"Button text length: {len(continue_button.text)}")
-                                print(f"Button text: '{continue_button.text}'")
-                                print(f"Button class: {continue_button.get_attribute('class')}")
-                                print(f"Button role: {continue_button.get_attribute('role')}")
-                                
-                                # Try clicking methods
-                                success = False
-                                try:
-                                    # Try direct click
-                                    continue_button.click()
-                                    print("Direct click sent")
-                                    time.sleep(2)
-                                except:
-                                    # Try JavaScript click
-                                    driver.execute_script("arguments[0].click();", continue_button)
-                                    print("JavaScript click sent")
-                                    time.sleep(2)
-                                
-                                # Verify click worked
-                                try:
-                                    # Wait for 2FA elements with a longer timeout
-                                    auth_element = WebDriverWait(driver, 10).until(
-                                        EC.presence_of_element_located((
-                                            By.XPATH,
-                                            "//*[contains(text(), 'two-factor authentication') or contains(text(), 'Enter code from')]"
-                                        ))
-                                    )
-                                    print("Successfully reached 2FA page!")
-                                    success = True
-                                except:
-                                    print("Failed to reach 2FA page")
-                                    success = False
-                                
-                                if not success:
-                                    print("Button click verification failed")
-                                    return False, None, None
-                                    
-                            except Exception as e:
-                                print(f"Error during button interaction: {str(e)}")
-                                return False, None, None
-                        else:
-                            print("Could not find Continue button")
-                            return False, None, None
-                        
+                        print("Found 'Try another way' button, clicking...")
+                        driver.execute_script("arguments[0].click();", try_another_way)
                         time.sleep(3)
                         
-                        # Now wait for 2FA input field
-                        WebDriverWait(driver, 10).until(
+                        # Wait for and handle the modal popup
+                        try:
+                            # Wait for and find the unchecked radio button
+                            auth_app_radio = WebDriverWait(driver, 10).until(
+                                EC.presence_of_element_located((
+                                    By.CSS_SELECTOR,
+                                    'input[type="radio"][aria-checked="false"]'
+                                ))
+                            )
+                            print("Found unchecked radio button")
+                            
+                            # Click the radio button
+                            driver.execute_script("arguments[0].click();", auth_app_radio)
+                            print("Clicked radio button")
+                            time.sleep(1)
+                            
+                            # Verify it was checked
+                            if auth_app_radio.get_attribute('aria-checked') == 'true':
+                                print("Successfully checked radio button")
+                            else:
+                                print("Warning: Radio button may not be checked properly")
+                            
+                            # Find and click the Continue button using multiple strategies
+                            print("Looking for Continue button...")
+                            continue_button = None
+                            
+                            # Try multiple selectors for the Continue button
+                            continue_selectors = [
+                                # Specific selectors for the actual button, not the container
+                                "//span[text()='Continue']/parent::div[@role='button']",
+                                "//div[@role='button'][./span[text()='Continue']]",
+                                "//div[@role='button'][normalize-space(.)='Continue']",
+                                "//div[contains(@class, 'x1n2onr6')][.//span[text()='Continue'] and not(.//span[text()='continue'])]",
+                                "//div[text()='Continue' and @role='button']",
+                                # More specific backup selectors
+                                "//div[@aria-label='Continue' and @role='button']",
+                                "//div[contains(@class, 'x1n2onr6')]/div/span[text()='Continue']/.."
+                            ]
+                            
+                            for selector in continue_selectors:
+                                try:
+                                    print(f"Trying selector: {selector}")
+                                    elements = driver.find_elements(By.XPATH, selector)
+                                    for element in elements:
+                                        # Only consider visible elements with short text
+                                        if element.is_displayed() and len(element.text) < 30:
+                                            text = element.text.strip()
+                                            print(f"Found potential button with text: '{text}'")
+                                            if text == "Continue":
+                                                continue_button = element
+                                                print("Found exact Continue button!")
+                                                break
+                                    if continue_button:
+                                        break
+                                except Exception:
+                                    continue
+                            
+                            if continue_button:
+                                print("Found Continue button, analyzing element...")
+                                try:
+                                    # Print element details for debugging
+                                    print(f"Button tag name: {continue_button.tag_name}")
+                                    print(f"Button text length: {len(continue_button.text)}")
+                                    print(f"Button text: '{continue_button.text}'")
+                                    print(f"Button class: {continue_button.get_attribute('class')}")
+                                    print(f"Button role: {continue_button.get_attribute('role')}")
+                                    
+                                    # Try clicking methods
+                                    success = False
+                                    try:
+                                        # Try direct click
+                                        continue_button.click()
+                                        print("Direct click sent")
+                                        time.sleep(2)
+                                    except:
+                                        # Try JavaScript click
+                                        driver.execute_script("arguments[0].click();", continue_button)
+                                        print("JavaScript click sent")
+                                        time.sleep(2)
+                                    
+                                    # Verify click worked
+                                    try:
+                                        # Wait for 2FA elements with a longer timeout
+                                        auth_element = WebDriverWait(driver, 10).until(
+                                            EC.presence_of_element_located((
+                                                By.XPATH,
+                                                "//*[contains(text(), 'two-factor authentication') or contains(text(), 'Enter code from')]"
+                                            ))
+                                        )
+                                        print("Successfully reached 2FA page!")
+                                        success = True
+                                    except:
+                                        print("Failed to reach 2FA page")
+                                        success = False
+                                    
+                                    if not success:
+                                        print("Button click verification failed")
+                                        return False, None, None
+                                        
+                                except Exception as e:
+                                    print(f"Error during button interaction: {str(e)}")
+                                    return False, None, None
+                            else:
+                                print("Could not find Continue button")
+                                return False, None, None
+                            
+                            time.sleep(3)
+                            
+                            # Now wait for 2FA input field
+                            WebDriverWait(driver, 10).until(
+                                EC.presence_of_element_located((
+                                    By.XPATH,
+                                    "//*[contains(text(), 'two-factor authentication') or contains(text(), 'Enter code from')]"
+                                ))
+                            )
+                            print("Successfully navigated to 2FA page")
+                            return "2fa", driver, totp_secret
+                            
+                        except TimeoutException as e:
+                            print(f"Error handling authentication method selection: {str(e)}")
+                            return False, None, None
+                        
+                    except TimeoutException:
+                        print("Could not find 'Try another way' button")
+                        return False, None, None
+                        
+                except TimeoutException:
+                    # No device approval page, check for direct 2FA page
+                    try:
+                        auth_text = WebDriverWait(driver, 3).until(
                             EC.presence_of_element_located((
                                 By.XPATH,
                                 "//*[contains(text(), 'two-factor authentication') or contains(text(), 'Enter code from')]"
                             ))
                         )
-                        print("Successfully navigated to 2FA page")
+                        print("Directly on 2FA page")
                         return "2fa", driver, totp_secret
+                    except TimeoutException:
+                        pass
                         
-                    except TimeoutException as e:
-                        print(f"Error handling authentication method selection: {str(e)}")
-                        return False, None, None
-                    
-                except TimeoutException:
-                    print("Could not find 'Try another way' button")
-                    return False, None, None
-                    
-            except TimeoutException:
-                # No device approval page, check for direct 2FA page
-                try:
-                    auth_text = WebDriverWait(driver, 3).until(
-                        EC.presence_of_element_located((
-                            By.XPATH,
-                            "//*[contains(text(), 'two-factor authentication') or contains(text(), 'Enter code from')]"
-                        ))
-                    )
-                    print("Directly on 2FA page")
-                    return "2fa", driver, totp_secret
-                except TimeoutException:
-                    pass
-                    
         except Exception as e:
             print(f"Login process failed for {email}: {str(e)}")
             return False, None, None
